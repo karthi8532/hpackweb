@@ -1,9 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hpackweb/screen/dashboard/approvallist.dart';
 import 'package:hpackweb/loginpage.dart';
 import 'package:hpackweb/models/pendingModel.dart';
 import 'package:hpackweb/screen/approvaldetails/approvaldetails.dart';
 import 'package:hpackweb/screen/dashboard/addpricelist.dart';
+import 'package:hpackweb/screen/reports/reportdetail.dart';
+import 'package:hpackweb/screen/reports/reportlist.dart';
 import 'package:hpackweb/utils/apputils.dart';
 import 'package:hpackweb/utils/sharedpref.dart';
 import 'package:hpackweb/widgets/searchwidget.dart';
@@ -16,32 +19,39 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  String selectedPage = 'Price List Form';
+  late String selectedPage;
   ApprovalDetail? selectedApproval;
   bool showApprovalDetail = false;
   final TextEditingController searchController = TextEditingController();
 
-  final Map<String, List<String>> menu = {
-    'Price List Form': [],
-    'Approve Price List': [],
-    // 'Reports': ['Sales Report', 'Stock Report'],
-    // 'Leads': [],
-    // 'Segments': [],
-    // 'Content': [],
-    // 'Flows': [],
-    // 'Analytics': [],
-  };
-
+  late Map<String, List<String>> menu;
   final Map<String, bool> expandedState = {'Reports': false};
+
+  @override
+  void initState() {
+    super.initState();
+
+    bool isSupervisor = Prefs.getIsSupervisor() == "Y";
+
+    // Build menu based on role
+    menu = {};
+    if (!isSupervisor) {
+      menu['Price List Form'] = [];
+      menu['Reports'] = [];
+      selectedPage = 'Price List Form';
+    }
+
+    if (isSupervisor) {
+      menu['Approve Price List'] = [];
+      selectedPage = 'Approve Price List';
+    }
+  }
 
   Widget getPage(String page) {
     switch (page) {
       case 'Price List Form':
-        return AddPriceListScreen(
-          searchController: searchController,
-        ); //searchController: searchController
+        return AddPriceListScreen();
       case 'Approve Price List':
-        // return ApprovalListPage(searchController: searchController);
         return Row(
           children: [
             Expanded(
@@ -71,10 +81,36 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         );
-      // case 'Sales Report':
-      //   return const Center(child: Text("Sales Report Page"));
-      // case 'Stock Report':
-      //   return const Center(child: Text("Stock Report Page"));
+      case 'Reports':
+        return Row(
+          children: [
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: Duration(milliseconds: 300),
+                child:
+                    showApprovalDetail && selectedApproval != null
+                        ? ReportDetailPage(
+                          detail: selectedApproval!,
+                          onClose: () {
+                            setState(() {
+                              showApprovalDetail = false;
+                              selectedApproval = null;
+                            });
+                          },
+                        )
+                        : ReportHeaderPage(
+                          searchController: searchController,
+                          onRowTap: (detail) {
+                            setState(() {
+                              selectedApproval = detail;
+                              showApprovalDetail = true;
+                            });
+                          },
+                        ),
+              ),
+            ),
+          ],
+        );
       default:
         return Center(child: Text("$page Page"));
     }
@@ -83,28 +119,32 @@ class _DashboardPageState extends State<DashboardPage> {
   IconData _getIcon(String title) {
     switch (title) {
       case 'Price List Form':
-        return Icons.price_change;
+        return CupertinoIcons.archivebox_fill;
       case 'Approve Price List':
         return Icons.check_circle_outline;
-      // case 'Reports':
-      //   return Icons.bar_chart;
-      // case 'Leads':
-      //   return Icons.people_outline;
-      // case 'Segments':
-      //   return Icons.segment;
-      // case 'Content':
-      //   return Icons.article_outlined;
-      // case 'Flows':
-      //   return Icons.swap_horiz;
-      // case 'Analytics':
-      //   return Icons.analytics_outlined;
+      case 'Reports':
+        return Icons.check_circle_outline;
       default:
         return Icons.circle;
     }
   }
 
+  void forcelogout() {
+    AppUtils.pop(context);
+    Prefs.setLoggedIn(false);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  }
+
+  void exitpopup() => AppUtils.pop(context);
+
   @override
   Widget build(BuildContext context) {
+    final isSupervisor = Prefs.getIsSupervisor() == "Y";
+
     return Scaffold(
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,17 +327,41 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                       Row(
                         children: [
+                          // SizedBox(width: 5),
+                          // AppUtils.buildNormalText(
+                          //   text: Prefs.getFromMailID() ?? "No Email",
+                          //   color: Colors.black54,
+                          // ),
+                          // SizedBox(width: 5),
+                          // AppUtils.buildNormalText(
+                          //   text: Prefs.getToMailID() ?? "No Email",
+                          //   color: Colors.black54,
+                          // ),
+                          // SizedBox(width: 10),
                           CircleAvatar(
                             backgroundImage: AssetImage(
                               'assets/images/profile.png',
                             ),
                           ),
                           SizedBox(width: 8),
-                          Text(
-                            Prefs.getName() ?? 'Guest',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+
+                          Column(
+                            children: [
+                              SizedBox(height: 10),
+                              Text(
+                                Prefs.getName() ?? 'Guest',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              AppUtils.buildNormalText(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                text: Prefs.getFromMailID() ?? "",
+                                color: Colors.black54,
+                              ),
+                            ],
                           ),
                           SizedBox(width: 16),
+
                           InkWell(
                             onTap: () {
                               AppUtils.showconfirmDialog(
@@ -327,16 +391,4 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
-
-  void forcelogout() {
-    AppUtils.pop(context);
-    Prefs.setLoggedIn(false);
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false,
-    );
-  }
-
-  void exitpopup() => AppUtils.pop(context);
 }

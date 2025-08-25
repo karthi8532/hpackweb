@@ -17,11 +17,17 @@ class Prefs {
   static Future<bool> setName(String value) async =>
       await _prefs.setString('Name', value);
 
-    static Future<bool> setApprovedBy(String value) async =>
-      await _prefs.setString('ApprovedBy', value);
-
   static Future<bool> setApproverUserId(String value) async =>
-      await _prefs.setString('ApprovedUserID', value);    
+      await _prefs.setString('ApprovedUserID', value);
+
+  static Future<bool> setIsSupervisor(String value) async =>
+      await _prefs.setString('IsSupervisor', value);
+
+  static Future<bool> setFromMailID(String value) async =>
+      await _prefs.setString('FromMail', value);
+
+  static Future<bool> setToMailID(String value) async =>
+      await _prefs.setString('ToMail', value);
 
   // ===== Getters =====
   static bool? getLoggedIn() => _prefs.getBool('isLoggedIn');
@@ -30,8 +36,10 @@ class Prefs {
 
   static String? getName() => _prefs.getString('Name');
 
-  static String? getApprovedBy() => _prefs.getString('ApprovedBy');
   static String? getApprovedByUserId() => _prefs.getString('ApprovedUserID');
+  static String? getIsSupervisor() => _prefs.getString('IsSupervisor');
+  static String? getFromMailID() => _prefs.getString('FromMail');
+  static String? getToMailID() => _prefs.getString('ToMail');
 
   // ===== Clear/Delete =====
   static Future<bool> remove(String key) async => await _prefs.remove(key);

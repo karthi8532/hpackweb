@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'dart:html' as html;
+import 'package:hpackweb/models/customerModel.dart';
+import 'package:hpackweb/models/pdfmodel.dart';
 import 'package:hpackweb/models/pricelistModel.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 
@@ -10,10 +12,8 @@ class ExcelExporter {
   ExcelExporter._internal();
 
   Future<void> exportPriceListWithHeader({
-    required List<PriceListModel> data,
-    required String customerName,
-    required String shippingAddress,
-    required String billingAddress,
+    required List<PdfListModel> data,
+    required CustomerModel? customer,
   }) async {
     final xlsio.Workbook workbook = xlsio.Workbook();
     final xlsio.Worksheet sheet = workbook.worksheets[0];
@@ -23,13 +23,13 @@ class ExcelExporter {
     // 🧾 Header info
     sheet
         .getRangeByIndex(rowIndex++, 1)
-        .setText("Customer Name: $customerName");
+        .setText("Customer Name: ${customer?.cardName}");
     sheet
         .getRangeByIndex(rowIndex++, 1)
-        .setText("Shipping Address: $shippingAddress");
+        .setText("Shipping Address: ${customer?.shippingFullAddress}");
     sheet
         .getRangeByIndex(rowIndex++, 1)
-        .setText("Billing Address: $billingAddress");
+        .setText("Billing Address: ${customer?.billingFullAddress}");
 
     rowIndex++; // spacer
 
@@ -40,8 +40,9 @@ class ExcelExporter {
       'Brand',
       'Case Size',
       'Pallet Qty',
-      'Case Price',
+      'Current Price',
       'Updated Price',
+      'EPR',
       'New Price',
     ];
 
@@ -56,13 +57,22 @@ class ExcelExporter {
       sheet.getRangeByIndex(rowIndex, 1).setText(item.itemCode ?? '');
       sheet.getRangeByIndex(rowIndex, 2).setText(item.itemName ?? '');
       sheet.getRangeByIndex(rowIndex, 3).setText(item.uBrand ?? '');
-      sheet.getRangeByIndex(rowIndex, 4).setText(item.uCaseSize ?? "");
+      sheet.getRangeByIndex(rowIndex, 4).setText(item.uCaseSize ?? '');
       sheet
           .getRangeByIndex(rowIndex, 5)
-          .setNumber(item.uPalletQty?.toDouble() ?? 0);
-      sheet.getRangeByIndex(rowIndex, 6).setNumber(item.casePrice ?? 0);
-      sheet.getRangeByIndex(rowIndex, 7).setNumber(item.updatedPrice ?? 0);
-      sheet.getRangeByIndex(rowIndex, 8).setNumber(item.newPrice ?? 0);
+          .setText((item.uPalletQty ?? 0).toStringAsFixed(2));
+      sheet
+          .getRangeByIndex(rowIndex, 6)
+          .setText((item.casePrice ?? 0).toStringAsFixed(2));
+      sheet
+          .getRangeByIndex(rowIndex, 7)
+          .setText((item.updatedPrice ?? 0).toStringAsFixed(2));
+      sheet
+          .getRangeByIndex(rowIndex, 8)
+          .setText((item.eprValue ?? 0).toStringAsFixed(2));
+      sheet
+          .getRangeByIndex(rowIndex, 9)
+          .setText((item.newPrice ?? 0).toStringAsFixed(2));
       rowIndex++;
     }
 

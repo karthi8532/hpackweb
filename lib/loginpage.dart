@@ -137,6 +137,7 @@ class _LoginPageState extends State<LoginPage> {
                                 onChanged: (value) {
                                   setState(() {
                                     selectedLoginType = value!;
+                                    print(selectedLoginType);
                                   });
                                 },
                                 decoration: InputDecoration(
@@ -198,11 +199,11 @@ class _LoginPageState extends State<LoginPage> {
     setState(() {
       loading = true;
     });
-    String loginTypeCode = selectedLoginType == 'Approver' ? 'A' : 'U';
+    print(selectedLoginType);
     var body = {
       "username": usernameController.text,
       "password": passwordController.text,
-      "LoginBy": loginTypeCode,
+      "LoginBy": selectedLoginType == 'Supervisor' ? 'A' : 'U',
     };
     print(jsonEncode(body));
     try {
@@ -228,7 +229,13 @@ class _LoginPageState extends State<LoginPage> {
           );
         }
       } else {
-        throw Exception("Server Error: ${response.statusCode}");
+        AppUtils.showSingleDialogPopup(
+          context,
+          jsonDecode(response.body)['message'] ?? "Login failed",
+          "Ok",
+          exitpopup,
+          AssetsImageWidget.errorimage,
+        );
       }
     } catch (e) {
       setState(() {
@@ -247,6 +254,11 @@ class _LoginPageState extends State<LoginPage> {
   Future addsharedpref(LoginModel model) async {
     Prefs.setEmpID(model.salesEmployeeId);
     Prefs.setName(model.salesEmployeeName);
+    Prefs.setIsSupervisor(selectedLoginType == "Supervisor" ? "Y" : "N");
+    Prefs.setApproverUserId(model.approvedby);
+    Prefs.setFromMailID(model.fromMail);
+    Prefs.setToMailID(model.toMail);
+
     Prefs.setLoggedIn(true);
     if (context.mounted) {
       Navigator.pushNamedAndRemoveUntil(

@@ -412,16 +412,52 @@ class EditPriceListModel {
   //   );
   // }
 
-  factory EditPriceListModel.fromJson(Map<String, dynamic> json) {
-    double caseprice = toDouble(json['CasePrice']);
-    double percent = toDouble(json['Percentage']);
-    double evaluatePrice = toDouble(json['EvaluatePrice']);
-    double updated = caseprice - (caseprice * percent / 100);
-    double newP = caseprice + updated;
-    double epr = toDouble(json['EPR']);
-    double marginPer =
-        updated > 0 ? ((updated - evaluatePrice) / updated) * 100 : 0;
+  // factory EditPriceListModel.fromJson(Map<String, dynamic> json) {
+  //   double caseprice = toDouble(json['CasePrice']);
+  //   double percent = toDouble(json['Percentage']);
+  //   double evaluatePrice = toDouble(json['EvaluatePrice']);
+  //   double updated = caseprice - (caseprice * percent / 100);
+  //   double newP = caseprice + updated;
+  //   double epr = toDouble(json['EPR']);
+  //   double marginPer =
+  //       updated > 0 ? ((updated - evaluatePrice) / updated) * 100 : 0;
 
+  //   return EditPriceListModel(
+  //     uBrand: toStringSafe(json['Brand']),
+  //     rowNo: toStringSafe(json['RowNo'] ?? "0"),
+  //     lineID: toStringSafe(json['LineID'] ?? "0"),
+  //     stock: toDouble(json['Stock']),
+  //     committed: toDouble(json['Committed']),
+  //     order: toDouble(json['OnOrder']),
+  //     salesPrice: toDouble(json['SalesPrice']),
+  //     evaluatedPrice: evaluatePrice,
+  //     casePrice: caseprice,
+  //     eprValue: epr,
+  //     itemCode: toStringSafe(json['ItemCode']),
+  //     itemName: toStringSafe(json['ItemName']),
+  //     listNum: toStringSafe(json['PriceListNum']),
+  //     listName: toStringSafe(json['PriceListName']),
+  //     uCaseSize: toStringSafe(json['CaseQty']),
+  //     uItemsPerLayer: toStringSafe(json['u_Items_per_Layer']),
+  //     uLayersPerPallet: toStringSafe(json['u_Layers_per_Pallet']),
+  //     uPalletQty: toDouble(json['PalletQty']),
+  //     updatedPercentage: percent,
+  //     updatedPrice: updated,
+  //     newPrice: newP,
+  //     isapproved: toStringSafe(json['isapproved']),
+  //     marginPercentage: marginPer,
+  //     category: toStringSafe(json['category'] ?? json['Category']),
+  //   );
+  // }
+
+  factory EditPriceListModel.fromJson(Map<String, dynamic> json) {
+    // double marginPer =
+    //     toDouble(json['Percentage']) > 0
+    //         ? ((toDouble(json['Percentage']) -
+    //                     toDouble(json['EvaluatePrice'])) /
+    //                 toDouble(json['Percentage'])) *
+    //             100
+    //         : 0;
     return EditPriceListModel(
       uBrand: toStringSafe(json['Brand']),
       rowNo: toStringSafe(json['RowNo'] ?? "0"),
@@ -430,9 +466,9 @@ class EditPriceListModel {
       committed: toDouble(json['Committed']),
       order: toDouble(json['OnOrder']),
       salesPrice: toDouble(json['SalesPrice']),
-      evaluatedPrice: evaluatePrice,
-      casePrice: caseprice,
-      eprValue: epr,
+      evaluatedPrice: toDouble(json['EvaluatePrice']),
+      casePrice: toDouble(json['CasePrice']),
+      eprValue: toDouble(json['EPR']),
       itemCode: toStringSafe(json['ItemCode']),
       itemName: toStringSafe(json['ItemName']),
       listNum: toStringSafe(json['PriceListNum']),
@@ -441,11 +477,11 @@ class EditPriceListModel {
       uItemsPerLayer: toStringSafe(json['u_Items_per_Layer']),
       uLayersPerPallet: toStringSafe(json['u_Layers_per_Pallet']),
       uPalletQty: toDouble(json['PalletQty']),
-      updatedPercentage: percent,
-      updatedPrice: updated,
-      newPrice: newP,
-      isapproved: toStringSafe(json['isapproved']),
-      marginPercentage: marginPer,
+      updatedPercentage: toDouble(json['Percentage']),
+      updatedPrice: toDouble(json['UpdatedPrice']),
+      newPrice: toDouble(json['NewPrice']),
+      isapproved: toStringSafe(json['ApprovalRequired']),
+      marginPercentage: toDouble(json['Marginpercentage']),
       category: toStringSafe(json['category'] ?? json['Category']),
     );
   }
@@ -471,7 +507,7 @@ class EditPriceListModel {
       'UpdatedPercentage': updatedPercentage,
       'UpdatedPrice': updatedPrice,
       'NewPrice': newPrice,
-      'isapproved': isapproved,
+      'ApprovalRequired': isapproved,
       'Marginpercentage': marginPercentage,
       'EPR': eprValue,
       'Category': category,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hpackweb/screen/dashboard/dashboardpage.dart';
+import 'package:hpackweb/screen/dashboard/idlelogoutwrapper.dart';
 import 'package:hpackweb/screen/dashboard/pricelistscreen.dart';
 import 'package:hpackweb/screen/splashscreen.dart';
 import 'package:hpackweb/service/sessiontimeout.dart';
@@ -36,25 +37,28 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Hpack Approval',
-      navigatorKey: navigatorKey,
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: const Color(0xFF2A3F54),
-        scaffoldBackgroundColor: const Color(0xFFF7F7F7),
-        fontFamily: 'Helvetica',
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: Colors.black87),
+    return IdleLogoutWrapper(
+      child: MaterialApp(
+        title: 'Hpack Approval',
+        navigatorKey: navigatorKey,
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          primaryColor: const Color(0xFF2A3F54),
+          scaffoldBackgroundColor: const Color(0xFFF7F7F7),
+          //fontFamily: 'MaterialIcons-Regular',
+          fontFamily: 'Tahoma',
+          textTheme: const TextTheme(
+            bodyMedium: TextStyle(color: Colors.black87),
+          ),
         ),
+        initialRoute: '/',
+        //home: PriceListScreen(),
+        routes: {
+          '/': (context) => const SplashScreen(),
+          '/login': (context) => const LoginPage(),
+          '/dashboard': (context) => const DashboardPage(),
+        },
       ),
-      initialRoute: '/',
-      //home: PriceListScreen(),
-      routes: {
-        '/': (context) => const SplashScreen(),
-        '/login': (context) => const LoginPage(),
-        '/dashboard': (context) => const DashboardPage(),
-      },
     );
   }
 }

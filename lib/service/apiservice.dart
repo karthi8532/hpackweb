@@ -1,11 +1,7 @@
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
-
 import 'package:hpackweb/constants/apiconstants.dart';
 import 'package:hpackweb/models/customerModel.dart';
-import 'package:hpackweb/network/networkclient.dart';
-import 'package:hpackweb/network/networkresponse.dart';
 import 'package:hpackweb/utils/sharedpref.dart';
 import 'package:http/http.dart' as http;
 
@@ -192,6 +188,30 @@ class ApiService {
       print("Status Code: ${response.statusCode}");
       print("Response Body: ${response.body}");
 
+      return response;
+    } catch (e) {
+      throw HttpException("Network error: ${e.toString()}");
+    }
+  }
+
+  static Future<http.Response> downloadApprovalPdf(
+    String cardCode,
+    int docEntry,
+  ) async {
+    final url = Uri.parse('${ApiConstants.mobileURL}api/items/getpdfdownload');
+    final headers = {"Content-Type": "application/json"};
+    final body = jsonEncode({"cardCode": cardCode, "docEntry": docEntry});
+
+    return await http.post(url, headers: headers, body: body);
+  }
+
+  static Future<http.Response> empgetAllList(dynamic body) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConstants.mobileURL}api/items/getalllistbyemp'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
       return response;
     } catch (e) {
       throw HttpException("Network error: ${e.toString()}");

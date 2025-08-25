@@ -1,15 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hpackweb/models/pendingModel.dart';
-import 'package:hpackweb/screen/approvaldetails/approvaldetails.dart';
 import 'package:hpackweb/screen/kpicard.dart';
 import 'package:hpackweb/service/apiservice.dart';
-import 'package:hpackweb/utils/appcolor.dart';
 import 'package:hpackweb/utils/apputils.dart';
 import 'package:hpackweb/utils/sharedpref.dart';
 import 'package:hpackweb/widgets/assetimage.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
-import 'package:syncfusion_flutter_core/theme.dart';
 
 class ApprovalListPage extends StatefulWidget {
   final TextEditingController searchController;
@@ -188,6 +185,15 @@ class _ApprovalListPageState extends State<ApprovalListPage> {
                                 ),
                               ),
                               GridColumn(
+                                columnName: 'approverremarks',
+                                label: Center(
+                                  child: Text(
+                                    'Approver Remarks',
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                              ),
+                              GridColumn(
                                 columnName: 'status',
                                 label: Center(
                                   child: Text(
@@ -218,9 +224,11 @@ class _ApprovalListPageState extends State<ApprovalListPage> {
         if (jsonResponse['status'].toString().toLowerCase() == "true") {
           final data = ApprovalListResponse.fromJson(jsonResponse);
           approvalData = data.message;
-          approvalDataSource = ApprovalDataGridSource(approvalData!.details);
+          print(jsonResponse);
           filteredApprovals = approvalData!.details;
-          approvalDataSource = ApprovalDataGridSource(filteredApprovals);
+          approvalDataSource = ApprovalDataGridSource(approvalData!.details);
+          // filteredApprovals = approvalData!.details;
+          // approvalDataSource = ApprovalDataGridSource(filteredApprovals);
         } else {
           AppUtils.showSingleDialogPopup(
             context,
@@ -231,7 +239,14 @@ class _ApprovalListPageState extends State<ApprovalListPage> {
           );
         }
       } else {
-        throw Exception("Server Error: ${response.statusCode}");
+        //throw Exception("Server Error: ${response.statusCode}");
+        AppUtils.showSingleDialogPopup(
+          context,
+          response.body.toString(),
+          "Ok",
+          exitpopup,
+          AssetsImageWidget.errorimage,
+        );
       }
     } catch (e) {
       AppUtils.showSingleDialogPopup(
@@ -249,90 +264,40 @@ class _ApprovalListPageState extends State<ApprovalListPage> {
   void exitpopup() => AppUtils.pop(context);
 }
 
-// class ApprovalDataGridSource extends DataGridSource {
-//   final List<ApprovalDetail> approvals;
-//   List<DataGridRow> _rows = [];
+Widget buildTypeBadge(String type) {
+  final statusKey = type.trim(); // Make it uppercase and trim whitespace
+  print("Status: '$type'");
+  final Map<String, Color> bgColors = {
+    'Approved': Color(0xFFDFFFE1),
+    'Pending': Colors.blue[100]!,
+    'Cancelled': Colors.grey[300]!,
+    'Rejected': Color(0xFFFFE5E5),
+  };
 
-//   ApprovalDataGridSource(this.approvals) {
-//     _rows =
-//         approvals.map((e) {
-//           return DataGridRow(
-//             cells: [
-//               DataGridCell(
-//                 columnName: 'docentry',
-//                 value: e.docentry.toString(),
-//               ),
-//               DataGridCell(columnName: 'cardCode', value: e.cardCode),
-//               DataGridCell(columnName: 'cardName', value: e.cardName),
-//               DataGridCell(columnName: 'priceListName', value: e.priceListName),
-//               DataGridCell(columnName: 'effectiveDate', value: e.effectiveDate),
-//               DataGridCell(columnName: 'remarks', value: e.remarks),
-//               DataGridCell(columnName: 'status', value: e.status),
-//               DataGridCell(columnName: 'actions', value: null),
-//             ],
-//           );
-//         }).toList();
-//   }
+  final Map<String, Color> textColors = {
+    'Approved': Color(0xFF1E8C4E),
+    'Pending': Colors.blue[800]!,
+    'Cancelled': Colors.grey[800]!,
+    'Rejected': Color(0xFFD32F2F),
+  };
 
-//   @override
-//   List<DataGridRow> get rows => _rows;
+  return Container(
+    margin: const EdgeInsets.all(5.0),
+    padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 5.0),
+    decoration: BoxDecoration(
+      color: bgColors[statusKey] ?? Colors.grey[100],
+      borderRadius: BorderRadius.all(Radius.circular(5)),
+    ),
+    child: Text(
+      statusKey,
+      style: TextStyle(
+        color: textColors[statusKey] ?? Colors.grey[100],
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
 
-//   @override
-//   DataGridRowAdapter buildRow(DataGridRow row) {
-//     final status =
-//         row
-//             .getCells()
-//             .firstWhere((cell) => cell.columnName == 'status')
-//             .value
-//             .toString();
-//     final index = _rows.indexOf(row);
-//     final isEven = index % 2 == 0;
-
-//     return DataGridRowAdapter(
-//       color: (isEven ? Colors.grey[100] : Colors.white),
-//       cells:
-//           row.getCells().map((cell) {
-//             if (cell.columnName == 'actions') {
-//               return Center(
-//                 child: ElevatedButton(
-//                   onPressed: null,
-//                   child: const Text("View"),
-//                 ),
-//               );
-//             } else {
-//               return Center(
-//                 child: Padding(
-//                   padding: const EdgeInsets.all(8.0),
-//                   child: Text(
-//                     cell.value.toString(),
-//                     overflow: TextOverflow.ellipsis,
-//                   ),
-//                 ),
-//               );
-//             }
-//           }).toList(),
-//     );
-//   }
-
-//   Color? _getRowColor(String status) {
-//     switch (status.toLowerCase()) {
-//       case 'pending':
-//         return Colors.blue[50];
-//       case 'approved':
-//         return Colors.green[50];
-//       case 'reject':
-//         return Colors.red[50];
-//       case 'cancelled':
-//         return Colors.grey[200];
-//       default:
-//         return null;
-//     }
-//   }
-
-//   ApprovalDetail getApprovalByRow(int index) {
-//     return approvals[index];
-//   }
-// }
 class ApprovalDataGridSource extends DataGridSource {
   final List<ApprovalDetail> approvals;
   List<DataGridRow> _rows = [];
@@ -351,6 +316,10 @@ class ApprovalDataGridSource extends DataGridSource {
               DataGridCell(columnName: 'priceListName', value: e.priceListName),
               DataGridCell(columnName: 'effectiveDate', value: e.effectiveDate),
               DataGridCell(columnName: 'remarks', value: e.remarks),
+              DataGridCell(
+                columnName: 'approverremarks',
+                value: e.approverremarks,
+              ),
               DataGridCell(columnName: 'status', value: e.status),
             ],
           );
@@ -382,6 +351,9 @@ class ApprovalDataGridSource extends DataGridSource {
                   child: const Text("View"),
                 ),
               );
+            } else if (cell.columnName == 'status') {
+              print(cell.value.toString());
+              return Center(child: buildTypeBadge(cell.value.toString()));
             } else {
               return Center(
                 child: Padding(

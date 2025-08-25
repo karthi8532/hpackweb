@@ -1,10 +1,9 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:hpackweb/main.dart';
 import 'package:hpackweb/models/pendingModel.dart';
-import 'package:hpackweb/models/pricelistModel.dart';
 import 'package:hpackweb/utils/sharedpref.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_datagrid/datagrid.dart';
@@ -19,7 +18,6 @@ import '../../widgets/assetimage.dart';
 class ApprovalDetailPage extends StatefulWidget {
   final ApprovalDetail detail;
   final VoidCallback onClose;
-
   const ApprovalDetailPage({
     super.key,
     required this.detail,
@@ -34,14 +32,18 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   bool loading = false;
   final TextEditingController toDateController = TextEditingController();
   final TextEditingController sapRemarksController = TextEditingController();
+  final TextEditingController approverRemarksController =
+      TextEditingController();
 
   final customerKey = GlobalKey<DropdownSearchState<CustomerModel>>();
   CustomerModel? selectedCustomer;
   List<EditPriceListModel> priceListData = [];
+  List<EditPriceListModel> fullPriceListData = [];
   PriceListDataGridSource? dataSource;
-  final TextEditingController searchController = TextEditingController();
   String approveStatus = "";
+  String createdByName = "";
   Map<String, dynamic>? selectedapproveItem;
+
   final approveKey = GlobalKey<DropdownSearchState<Map<String, dynamic>>>();
 
   List<Map<String, dynamic>> approveList = [
@@ -55,13 +57,20 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
   void initState() {
     super.initState();
 
-    searchController.addListener(_searchListener);
+    // widget.searchController.addListener(_searchListener);
     getDocentryList();
   }
 
-  void _searchListener() {
-    // final query = searchController.text.toLowerCase();
-    // dataSource?.updateSearchQuery(query);
+  @override
+  void dispose() {
+    // widget.searchController.removeListener(_searchListener);
+    // widget.searchController.dispose();
+    toDateController.dispose();
+    sapRemarksController.dispose();
+    approverRemarksController.dispose();
+    // // Dispose the data grid source
+    dataSource?.dispose();
+    super.dispose();
   }
 
   void getDocentryList() async {
@@ -79,17 +88,20 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
         print(result['EffectiveDate']);
         toDateController.text = result['EffectiveDate'] ?? "";
         sapRemarksController.text = result['Remarks'] ?? "";
+        createdByName = result['CreatedByName'] ?? "";
+        approverRemarksController.text = result['ApproverRemarks'] ?? "";
         final List<dynamic> responseData = data['message']['details'];
         isApproved = result['AppovedStatus'] == "P" ? false : true;
         selectedapproveItem = approveList.firstWhere(
           (item) => item['id'] == result['Status'],
           orElse: () => {'id': 'P', 'name': 'Pending'},
         );
+
         selectedCustomer = CustomerModel(
           cardCode: result['CardCode'],
           cardName: result['CardName'],
-          billingAddress: [],
-          shippingAddress: [],
+          billingAddress: parseRawAddress(result['BillingAddress']),
+          shippingAddress: parseRawAddress(result['ShippingAddress']),
         );
         final List<EditPriceListModel> raw =
             responseData
@@ -97,30 +109,20 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                   (e) => EditPriceListModel.fromJson(e as Map<String, dynamic>),
                 )
                 .toList();
-        print(jsonEncode(raw.map((e) => e.toJson()).toList())); // ✅ Works?
 
         for (var item in raw) {
           if (item.updatedPercentage != null && item.updatedPercentage! > 0) {
-            final updated =
-                item.casePrice! +
-                ((item.updatedPercentage ?? 0) * item.casePrice!) / 100;
-
-            item.updatedPrice = updated;
-            item.newPrice = (item.eprValue ?? 0) + updated;
-
-            if (updated < (item.evaluatedPrice ?? 0)) {
-              item.isapproved = '';
-              item.marginPercentage = 0;
-            } else {
-              item.marginPercentage =
-                  (updated - (item.evaluatedPrice ?? 0)) / updated;
-              item.isapproved =
-                  (updated < (item.salesPrice ?? double.infinity)) ? 'Yes' : '';
-            }
+            applyPercentageAndColorLogic(item);
           }
         }
+        fullPriceListData = List.from(raw);
+
+        // Grouped list for UI display
+        final grouped = withGroupedCategories(raw);
+
+        // Set state once
         setState(() {
-          priceListData = withGroupedCategories(raw);
+          priceListData = grouped;
           dataSource = PriceListDataGridSource(
             priceListData,
             context,
@@ -129,6 +131,9 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
             },
           );
         });
+
+        dataSource!._buildRows();
+        dataSource!.notifyListeners();
       } else {
         handleError("Unexpected status code: \${response.statusCode}");
       }
@@ -136,6 +141,54 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
       handleError("API error: $e");
     } finally {
       setState(() => loading = false);
+    }
+  }
+
+  List<AddressModel> parseRawAddress(String raw) {
+    final parts = raw.split(',').map((e) => e.trim()).toList();
+
+    return [
+      AddressModel(
+        address: parts.isNotEmpty ? parts[0] : '',
+        address2: parts.length > 1 ? parts[1] : '',
+        address3: parts.length > 2 ? parts[2] : '',
+        zipCode: parts.length > 3 ? parts[3] : '',
+        city: parts.length > 4 ? parts[4] : '',
+        country: parts.length > 5 ? parts[5] : '',
+      ),
+    ];
+  }
+
+  void applyPercentageAndColorLogic(EditPriceListModel model) {
+    final percent = model.updatedPercentage ?? 0;
+    final casePrice = model.casePrice ?? 0;
+    final updated = casePrice - ((casePrice * percent) / 100);
+
+    if (updated < (model.evaluatedPrice ?? 0)) {
+      model.isapproved = '';
+      model.updatedPercentage = 0;
+      model.updatedPrice = 0;
+      model.marginPercentage = 0;
+    } else {
+      model.updatedPrice = updated;
+      model.newPrice = (model.eprValue ?? 0) + updated;
+
+      if (percent == 0) {
+        model.isapproved = '';
+        model.casePrice = updated;
+        model.marginPercentage = 0;
+      } else {
+        model.marginPercentage =
+            updated != 0 && model.evaluatedPrice != null
+                ? ((updated - model.evaluatedPrice!) / updated) * 100
+                : 0;
+
+        model.isapproved =
+            (updated > (model.evaluatedPrice ?? 0) &&
+                    updated < (model.salesPrice ?? double.infinity))
+                ? 'Yes'
+                : '';
+      }
     }
   }
 
@@ -307,7 +360,17 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                             ),
                           ),
                           SizedBox(width: 5),
-                          buildTextField("Remarks", sapRemarksController, true),
+                          buildTextField(
+                            "Remarks",
+                            sapRemarksController,
+                            false,
+                          ),
+                          SizedBox(width: 5),
+                          buildTextField(
+                            "Approver Remarks",
+                            approverRemarksController,
+                            true,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -315,158 +378,240 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                         child:
                             dataSource == null
                                 ? const Center(child: Text("No data loaded"))
-                                : SfDataGrid(
-                                  source: dataSource!,
-                                  allowEditing: true,
-                                  allowSorting: true,
-                                  allowFiltering: true,
-                                  allowColumnsDragging: true,
-                                  allowColumnsResizing: true,
-                                  frozenColumnsCount:
-                                      2, // freeze Item Code & Name
-                                  columnWidthMode: ColumnWidthMode.auto,
-                                  gridLinesVisibility: GridLinesVisibility.both,
-                                  headerGridLinesVisibility:
-                                      GridLinesVisibility.both,
-                                  selectionMode: SelectionMode.single,
-                                  navigationMode: GridNavigationMode.cell,
-                                  editingGestureType: EditingGestureType.tap,
+                                : ScrollConfiguration(
+                                  behavior: ScrollConfiguration.of(
+                                    context,
+                                  ).copyWith(
+                                    scrollbars: true,
+                                    dragDevices: {
+                                      PointerDeviceKind.touch,
+                                      PointerDeviceKind.mouse,
+                                    },
+                                  ),
+                                  child: SfDataGrid(
+                                    source: dataSource!,
+                                    allowEditing: true,
+                                    allowSorting: true,
+                                    allowFiltering: true,
+                                    allowColumnsDragging: true,
+                                    allowColumnsResizing: true,
+                                    frozenColumnsCount:
+                                        4, // freeze Item Code & Name
+                                    columnWidthMode: ColumnWidthMode.auto,
+                                    gridLinesVisibility:
+                                        GridLinesVisibility.both,
+                                    headerGridLinesVisibility:
+                                        GridLinesVisibility.both,
+                                    selectionMode: SelectionMode.single,
+                                    navigationMode: GridNavigationMode.cell,
+                                    editingGestureType: EditingGestureType.tap,
 
-                                  columns: [
-                                    GridColumn(
-                                      columnName: 'Category',
-                                      label: const Center(
-                                        child: Text('Category'),
+                                    columns: [
+                                      GridColumn(
+                                        width: 150,
+                                        columnName: 'Category',
+                                        label: const Center(
+                                          child: Text(
+                                            'Category',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Brand',
-                                      label: const Center(child: Text('Brand')),
-                                    ),
+                                      GridColumn(
+                                        columnName: 'Brand',
+                                        label: const Center(
+                                          child: Text(
+                                            'Brand',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        width: 180,
+                                        columnName: 'Item Code',
+                                        label: const Center(
+                                          child: Text(
+                                            'Item Code',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        width: 160,
+                                        columnName: 'Item Name',
+                                        label: const Center(
+                                          child: Text(
+                                            'Item Name',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        columnName: 'Stock',
+                                        label: const Center(
+                                          child: Text(
+                                            'Stock',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        columnName: 'Comitted',
+                                        label: const Center(
+                                          child: Text(
+                                            'Comitted',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        columnName: 'Order',
+                                        label: const Center(
+                                          child: Text(
+                                            'Order',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        columnName: 'SalesPrice',
+                                        label: const Center(
+                                          child: Text(
+                                            'Preferred Price',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
+                                      GridColumn(
+                                        columnName: 'Evaluate Price',
+                                        label: const Center(
+                                          child: Text(
+                                            'Cost Price',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      ),
 
-                                    GridColumn(
-                                      columnName: 'Stock',
-                                      label: const Center(child: Text('Stock')),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Comitted',
-                                      label: const Center(
-                                        child: Text('Comitted'),
+                                      GridColumn(
+                                        columnName: 'Case Size',
+                                        label: const Center(
+                                          child: Text(
+                                            'Case Size',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Order',
-                                      label: const Center(child: Text('Order')),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'SalesPrice',
-                                      label: const Center(
-                                        child: Text('Sales Price'),
+                                      GridColumn(
+                                        columnName: 'Pallet Qty',
+                                        label: const Center(
+                                          child: Text(
+                                            'Pallet Qty',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Evaluate Price',
-                                      label: const Center(
-                                        child: Text('Evaluate Price'),
+                                      GridColumn(
+                                        columnName: 'Case Price',
+                                        label: const Center(
+                                          child: Text(
+                                            'Current Price',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Item Code',
-                                      label: const Center(
-                                        child: Text('Item Code'),
+                                      GridColumn(
+                                        columnName: 'Updated %',
+                                        label: const Center(
+                                          child: Text(
+                                            'Updated %',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Item Name',
-                                      label: const Center(
-                                        child: Text('Item Name'),
+                                      GridColumn(
+                                        columnName: 'Updated Price',
+                                        label: const Center(
+                                          child: Text(
+                                            'Updated Price',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Case Size',
-                                      label: const Center(
-                                        child: Text('Case Size'),
+                                      GridColumn(
+                                        columnName: 'EPR',
+                                        label: const Center(
+                                          child: Text(
+                                            'EPR',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Pallet Qty',
-                                      label: const Center(
-                                        child: Text('Pallet Qty'),
+                                      GridColumn(
+                                        columnName: 'New Price',
+                                        label: const Center(
+                                          child: Text(
+                                            'New Price',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Case Price',
-                                      label: const Center(
-                                        child: Text('Case Price'),
-                                      ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Updated %',
-                                      label: const Center(
-                                        child: Text('Updated %'),
-                                      ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Updated Price',
-                                      label: const Center(
-                                        child: Text('Updated Price'),
-                                      ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'New Price',
-                                      label: const Center(
-                                        child: Text('New Price'),
-                                      ),
-                                    ),
 
-                                    GridColumn(
-                                      columnName: 'Margin %',
-                                      label: const Center(
-                                        child: Text('Margin %'),
+                                      GridColumn(
+                                        columnName: 'Margin %',
+                                        label: const Center(
+                                          child: Text(
+                                            'Margin %',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    GridColumn(
-                                      columnName: 'Is Approval Required',
-                                      label: const Center(
-                                        child: Text('Is Approval Required'),
+                                      GridColumn(
+                                        columnName: 'Is Approval Required',
+                                        label: const Center(
+                                          child: Text(
+                                            'Is Approval Required',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                  onQueryRowHeight: (details) {
-                                    if (details.rowIndex == 0)
-                                      return 50; // header row
+                                    ],
+                                    onQueryRowHeight: (details) {
+                                      if (details.rowIndex == 0)
+                                        return 50; // header row
 
-                                    final row =
-                                        dataSource!.rows[details.rowIndex - 1];
-                                    final categoryCell = row
-                                        .getCells()
-                                        .firstWhere(
-                                          (c) => c.columnName == 'category',
-                                          orElse:
-                                              () => DataGridCell(
-                                                columnName: '',
-                                                value: '',
-                                              ),
-                                        );
+                                      final row =
+                                          dataSource!.rows[details.rowIndex -
+                                              1];
+                                      final categoryCell = row
+                                          .getCells()
+                                          .firstWhere(
+                                            (c) => c.columnName == 'category',
+                                            orElse:
+                                                () => DataGridCell(
+                                                  columnName: '',
+                                                  value: '',
+                                                ),
+                                          );
 
-                                    final isCategory =
-                                        categoryCell.value
-                                            .toString()
-                                            .isNotEmpty;
+                                      final isCategory =
+                                          categoryCell.value
+                                              .toString()
+                                              .isNotEmpty;
 
-                                    if (isCategory) {
-                                      // Estimate text height based on font size and length
-                                      final text =
-                                          categoryCell.value.toString();
-                                      final estimatedLines =
-                                          (text.length / 40).ceil();
-                                      return 32.0 +
-                                          (estimatedLines *
-                                              20.0); // Adjust as needed
-                                    }
+                                      if (isCategory) {
+                                        // Estimate text height based on font size and length
+                                        final text =
+                                            categoryCell.value.toString();
+                                        final estimatedLines =
+                                            (text.length / 40).ceil();
+                                        return 32.0 +
+                                            (estimatedLines *
+                                                20.0); // Adjust as needed
+                                      }
 
-                                    return 50;
-                                  },
+                                      return 50;
+                                    },
+                                  ),
                                 ),
                       ),
                       const SizedBox(height: 16),
@@ -507,16 +652,20 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
     }
 
     setState(() => loading = true);
-
     try {
       var payload = {
         "DocEntry": widget.detail.docentry,
         "EffectiveDate": toDateController.text,
         "ApprovedByID": Prefs.getEmpID(),
         "ApprovedByName": Prefs.getName(),
-        "ApprovedStatus": approveStatus,
-        "Status": approveStatus,
+        "ApprovedStatus": selectedapproveItem!['id'] ?? "P",
+        "Status": selectedapproveItem!['id'] ?? "P",
         "Remarks": sapRemarksController.text,
+        "ApproverRemarks": approverRemarksController.text,
+        // "FromMail": Prefs.getFromMailID() ?? "",
+        // "toEmail": Prefs.getToMailID() ?? "",
+        // "customerName": selectedCustomer!.cardName,
+        // "requestedBy": createdByName,
         "details":
             priceListData
                 .where((e) => !e.isGroupHeader)
@@ -527,6 +676,8 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
                     "UpdatedPrice": e.updatedPrice,
                     "EPR": e.eprValue,
                     "NewPrice": e.newPrice,
+                    "MarginPercentage": e.marginPercentage,
+                    "IsApprovalRequired": e.isapproved,
                   },
                 )
                 .toList(),
@@ -629,15 +780,22 @@ class _ApprovalDetailPageState extends State<ApprovalDetailPage> {
 }
 
 class PriceListDataGridSource extends DataGridSource {
-  bool isDialogShowing = false;
-  List<DataGridRow> _rows = [];
   final List<EditPriceListModel> data;
   final VoidCallback onUpdate;
-  BuildContext context;
+  final BuildContext context;
+
+  final Map<String, TextEditingController> _controllers = {};
+  final Map<String, FocusNode> _focusNodes = {};
+
+  final Map<String, TextEditingController> _updatedpricecontrollers = {};
+  final Map<String, FocusNode> _updatedfocusNodes = {};
+
+  List<DataGridRow> _rows = [];
+  bool isDialogShowing = false;
+
   PriceListDataGridSource(this.data, this.context, {required this.onUpdate}) {
     _buildRows();
   }
-
   void _buildRows() {
     _rows =
         data.map((e) {
@@ -646,80 +804,108 @@ class PriceListDataGridSource extends DataGridSource {
               DataGridCell<String>(columnName: 'Category', value: e.category),
               DataGridCell<String>(
                 columnName: 'Brand',
-                value: e.isGroupHeader ? null : e.uBrand,
+                value: e.isGroupHeader ? null : e.uBrand ?? '',
+              ),
+              DataGridCell<String>(
+                columnName: 'Item Code',
+                value: e.isGroupHeader ? null : e.itemCode ?? '',
+              ),
+              DataGridCell<String>(
+                columnName: 'Item Name',
+                value: e.isGroupHeader ? null : e.itemName ?? '',
               ),
               DataGridCell<String>(
                 columnName: 'Stock',
-                value: e.isGroupHeader ? null : e.stock!.toStringAsFixed(2),
+                value:
+                    e.isGroupHeader
+                        ? null
+                        : (e.stock?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Comitted',
-                value: e.isGroupHeader ? null : e.committed!.toStringAsFixed(2),
+                value:
+                    e.isGroupHeader
+                        ? null
+                        : (e.committed?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Order',
-                value: e.isGroupHeader ? null : e.order!.toStringAsFixed(2),
+                value:
+                    e.isGroupHeader
+                        ? null
+                        : (e.order?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'SalesPrice',
                 value:
-                    e.isGroupHeader ? null : e.salesPrice!.toStringAsFixed(2),
+                    e.isGroupHeader
+                        ? null
+                        : (e.salesPrice?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Evaluate Price',
                 value:
                     e.isGroupHeader
                         ? null
-                        : e.evaluatedPrice!.toStringAsFixed(2),
+                        : (e.evaluatedPrice?.toStringAsFixed(2) ?? '0.00'),
               ),
-              DataGridCell<String>(
-                columnName: 'Item Code',
-                value: e.isGroupHeader ? null : e.itemCode,
-              ),
-              DataGridCell<String>(
-                columnName: 'Item Name',
-                value: e.isGroupHeader ? null : e.itemName,
-              ),
+
               DataGridCell<String>(
                 columnName: 'Case Size',
-                value: e.isGroupHeader ? null : e.uCaseSize,
+                value: e.isGroupHeader ? null : e.uCaseSize ?? '',
               ),
               DataGridCell<String>(
                 columnName: 'Pallet Qty',
                 value:
-                    e.isGroupHeader ? null : e.uPalletQty!.toStringAsFixed(2),
+                    e.isGroupHeader
+                        ? null
+                        : (e.uPalletQty?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Case Price',
-                value: e.isGroupHeader ? null : e.casePrice!.toStringAsFixed(2),
+                value:
+                    e.isGroupHeader
+                        ? null
+                        : (e.casePrice?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Updated %',
                 value:
                     e.isGroupHeader
                         ? null
-                        : e.updatedPercentage!.toStringAsFixed(2),
+                        : (e.updatedPercentage?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Updated Price',
                 value:
-                    e.isGroupHeader ? null : e.updatedPrice!.toStringAsFixed(2),
+                    e.isGroupHeader
+                        ? null
+                        : (e.updatedPrice?.toStringAsFixed(2) ?? '0.00'),
+              ),
+              DataGridCell<String>(
+                columnName: 'EPR',
+                value:
+                    e.isGroupHeader
+                        ? null
+                        : (e.eprValue?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'New Price',
                 value:
-                    e.isGroupHeader ? null : e.updatedPrice!.toStringAsFixed(2),
+                    e.isGroupHeader
+                        ? null
+                        : (e.newPrice?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Margin %',
                 value:
                     e.isGroupHeader
                         ? null
-                        : e.marginPercentage!.toStringAsFixed(2),
+                        : (e.marginPercentage?.toStringAsFixed(2) ?? '0.00'),
               ),
               DataGridCell<String>(
                 columnName: 'Is Approval Required',
-                value: e.isGroupHeader ? null : e.isapproved.toString(),
+                value: e.isGroupHeader ? null : e.isapproved ?? '',
               ),
             ],
           );
@@ -730,115 +916,182 @@ class PriceListDataGridSource extends DataGridSource {
   List<DataGridRow> get rows => _rows;
 
   @override
-  DataGridRowAdapter? buildRow(DataGridRow row) {
-    final isHeader = row.getCells()[1].value == null;
-    final int rowIndex = _rows.indexOf(row);
+  DataGridRowAdapter buildRow(DataGridRow row) {
+    final rowIndex = _rows.indexOf(row);
     final model = data[rowIndex];
-    final Map<String, TextEditingController> controllers = {};
-    final bool isApproved = model.isapproved == 'Yes';
-    final bool isCasePriceZero = model.casePrice == 0;
-    final bool isUpdatePercentageZero = model.updatedPercentage == 0;
-    final bool isEvenRow = rowIndex % 2 == 0;
-    dynamic editedValue;
-    TextEditingController getController(String itemCode, String initialValue) {
-      if (!controllers.containsKey(itemCode)) {
-        controllers[itemCode] = TextEditingController(text: initialValue);
-      }
-      return controllers[itemCode]!;
-    }
+    final isHeader = row.getCells()[1].value == null;
+    final isApproved = model.isapproved == 'Yes';
+    final isCasePriceZero = model.casePrice == 0;
+    final isUpdatePercentageZero = (model.updatedPercentage ?? 0) == 0;
+    final isEvenRow = rowIndex % 2 == 0;
+    final itemCode = model.itemCode ?? 'row$rowIndex';
 
-    final FocusNode focusNode = FocusNode();
-    final Color backgroundColor =
+    _controllers.putIfAbsent(itemCode, () {
+      return TextEditingController(
+        text: model.updatedPercentage?.toStringAsFixed(2) ?? '0.00',
+      );
+    });
+
+    _focusNodes.putIfAbsent(itemCode, () => FocusNode());
+
+    _updatedpricecontrollers.putIfAbsent(itemCode, () {
+      return TextEditingController(
+        text:
+            model.updatedPrice?.toStringAsFixed(2) ??
+            (model.casePrice ?? 0).toStringAsFixed(2),
+      );
+    });
+    _updatedfocusNodes.putIfAbsent(itemCode, () => FocusNode());
+
+    final bgColor =
         isCasePriceZero
             ? Colors.grey.shade200
             : (isApproved && !isUpdatePercentageZero
                 ? Colors.green.shade100
                 : (isEvenRow ? Colors.white : Colors.grey.shade50));
-    return DataGridRowAdapter(
-      color: isHeader ? Colors.grey[300] : backgroundColor,
 
+    return DataGridRowAdapter(
+      color: isHeader ? Colors.grey[300] : bgColor,
       cells:
           row.getCells().asMap().entries.map((entry) {
             final index = entry.key;
             final cell = entry.value;
-            final controller = TextEditingController(
-              text: model.updatedPercentage?.toString() ?? '',
-            );
+
             if (cell.columnName == 'Updated %' && !isHeader) {
-              // Updated % column and not header row
-              final model = data[_rows.indexOf(row)];
+              final controller = _controllers[itemCode]!;
+              final focusNode = _focusNodes[itemCode]!;
 
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: RawKeyboardListener(
-                  focusNode: focusNode,
-                  onKey: (RawKeyEvent event) {
-                    if (event is RawKeyDownEvent) {
-                      // Enter key: submit
-                      if (event.logicalKey == LogicalKeyboardKey.enter ||
-                          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-                        handleSubmit(controller.text, model);
-                      }
-
-                      // Tab key: move to next focus
-                      if (event.logicalKey == LogicalKeyboardKey.tab) {
-                        FocusScope.of(context).nextFocus();
-                      }
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Focus(
+                  onFocusChange: (hasFocus) {
+                    if (!hasFocus) {
+                      //handleSubmit(controller.text, model, itemCode);
+                      handlePriceOrPercentageChange(
+                        value: controller.text,
+                        model: model,
+                        itemCode: itemCode,
+                        isPercentageInput: true,
+                      );
                     }
                   },
-                  child: Focus(
-                    onFocusChange: (hasFocus) {
-                      if (!hasFocus) {
-                        editedValue = controller.text;
-                        handleSubmit(editedValue, model);
-                      }
+                  child: TextFormField(
+                    controller: controller,
+                    onTap:
+                        () =>
+                            controller.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: controller.value.text.length,
+                            ),
+                    focusNode: focusNode,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) {
+                      //handleSubmit(controller.text, model, itemCode);
+                      handlePriceOrPercentageChange(
+                        value: controller.text,
+                        model: model,
+                        itemCode: itemCode,
+                        isPercentageInput: true,
+                      );
                     },
-                    child: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      keyboardType: TextInputType.numberWithOptions(
-                        decimal: true,
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.black,
-                            width: 0.5,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Colors.blue,
-                            width: 0.5,
-                          ),
-                        ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.black, width: 0.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue, width: 0.5),
                       ),
                     ),
                   ),
                 ),
               );
             }
+
+            if (cell.columnName == 'Updated Price' && !isHeader) {
+              final controller = _updatedpricecontrollers[itemCode]!;
+              final focusNode = _updatedfocusNodes[itemCode]!;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Focus(
+                  onFocusChange: (hasFocus) {
+                    if (!hasFocus) {
+                      //handleSubmit(controller.text, model, itemCode);
+                      handlePriceOrPercentageChange(
+                        value: controller.text,
+                        model: model,
+                        itemCode: itemCode,
+                        isPercentageInput: false,
+                      );
+                    }
+                  },
+                  child: TextFormField(
+                    controller: controller,
+                    onTap:
+                        () =>
+                            controller.selection = TextSelection(
+                              baseOffset: 0,
+                              extentOffset: controller.value.text.length,
+                            ),
+                    focusNode: focusNode,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) {
+                      //handleSubmit(controller.text, model, itemCode);
+                      handlePriceOrPercentageChange(
+                        value: controller.text,
+                        model: model,
+                        itemCode: itemCode,
+                        isPercentageInput: false,
+                      );
+                    },
+                    decoration: const InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.black, width: 0.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue, width: 0.5),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }
+
             if (cell.columnName == 'Category') {
               return Container(
                 width: 800,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
-                  isHeader ? cell.value?.toString() ?? '' : "",
+                  isHeader ? cell.value?.toString() ?? '' : '',
                   style: TextStyle(
                     fontWeight: isHeader ? FontWeight.bold : FontWeight.w500,
-                    fontSize: isHeader ? 14 : 14,
+                    fontSize: 14,
                   ),
                 ),
               );
             }
+
             return Container(
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -846,7 +1099,7 @@ class PriceListDataGridSource extends DataGridSource {
                 cell.value?.toString() ?? '',
                 style: TextStyle(
                   fontWeight: isHeader ? FontWeight.bold : FontWeight.w500,
-                  fontSize: isHeader ? 16 : 14,
+                  fontSize: 14,
                 ),
               ),
             );
@@ -854,55 +1107,150 @@ class PriceListDataGridSource extends DataGridSource {
     );
   }
 
-  void handleSubmit(String value, EditPriceListModel model) async {
-    final percent = double.tryParse(value.toString()) ?? 0.0;
-    model.updatedPercentage = percent;
+  // void handleSubmit(
+  //   String value,
+  //   EditPriceListModel model,
+  //   String itemCode,
+  // ) async {
+  //   final percent = double.tryParse(value) ?? 0.0;
+  //   model.updatedPercentage = percent;
 
-    final double casePrice = model.casePrice ?? 0;
-    final double updated = casePrice - ((casePrice * percent) / 100);
+  //   final casePrice = model.casePrice ?? 0.0;
+  //   final updated = casePrice - ((casePrice * percent) / 100);
 
-    if (updated < (model.evaluatedPrice ?? 0)) {
+  //   if (updated < (model.evaluatedPrice ?? 0.0)) {
+  //     if (isDialogShowing) return;
+  //     isDialogShowing = true;
+
+  //     await showDialog(
+  //       context: context,
+  //       builder:
+  //           (_) => AlertDialog(
+  //             title: const Text('Invalid Price'),
+  //             content: const Text(
+  //               'Updated Price cannot be lower than Cost Price.',
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.of(context).pop(),
+  //                 child: const Text('OK'),
+  //               ),
+  //             ],
+  //           ),
+  //     );
+
+  //     isDialogShowing = false;
+
+  //     model.isapproved = '';
+  //     model.updatedPercentage = 0;
+  //     model.updatedPrice = model.casePrice;
+  //     model.marginPercentage = 0;
+  //     _controllers[itemCode]?.text = '0.00';
+  //   } else {
+  //     model.updatedPrice = updated;
+  //     model.newPrice = (model.eprValue ?? 0) + updated;
+  //     model.newPrice = (model.eprValue ?? 0) + model.updatedPrice!;
+  //     if (percent == 0) {
+  //       model.isapproved = '';
+  //       model.marginPercentage = 0;
+  //     } else {
+  //       model.marginPercentage =
+  //           ((updated - (model.evaluatedPrice ?? 0)) / updated) * 100;
+
+  //       if (updated > (model.evaluatedPrice ?? 0) &&
+  //           updated < (model.salesPrice ?? double.infinity)) {
+  //         model.isapproved = 'Yes';
+  //         model.newPrice = (model.eprValue ?? 0) + model.updatedPrice!;
+  //       } else {
+  //         model.isapproved = '';
+  //         model.newPrice = (model.eprValue ?? 0) + model.updatedPrice!;
+  //       }
+  //     }
+
+  //     _controllers[itemCode]?.text = percent.toStringAsFixed(2);
+  //   }
+
+  //   _buildRows();
+  //   onUpdate();
+  // }
+  void handlePriceOrPercentageChange({
+    required String value,
+    required EditPriceListModel model,
+    required String itemCode,
+    required bool
+    isPercentageInput, // true if % field edited, false if price edited
+  }) async {
+    final casePrice = model.casePrice ?? 0.0;
+    double updatedPrice = model.updatedPrice ?? casePrice;
+    double percent = model.updatedPercentage ?? 0.0;
+
+    if (isPercentageInput) {
+      // user typed percentage → calculate price
+      percent = double.tryParse(value) ?? 0.0;
+      updatedPrice = casePrice - ((casePrice * percent) / 100);
+    } else {
+      // user typed price → calculate percentage
+      updatedPrice = double.tryParse(value) ?? 0.0;
+      percent =
+          casePrice == 0 ? 0.0 : ((casePrice - updatedPrice) / casePrice) * 100;
+    }
+
+    // Validation
+    if (updatedPrice < (model.evaluatedPrice ?? 0.0)) {
       if (isDialogShowing) return;
-
       isDialogShowing = true;
       await showDialog(
         context: context,
         builder:
             (_) => AlertDialog(
-              title: Text('Invalid Price'),
-              content: Text('Updated Price cannot be lower than Cost Price.'),
+              title: const Text('Invalid Price'),
+              content: const Text(
+                'Updated Price cannot be lower than Cost Price.',
+              ),
               actions: [
                 TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: Text('OK'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
                 ),
               ],
             ),
       );
-      isDialogShowing = false;
 
+      isDialogShowing = false;
       model.isapproved = '';
       model.updatedPercentage = 0;
+      model.updatedPrice = model.casePrice;
       model.marginPercentage = 0;
-    } else {
-      model.updatedPrice = updated;
-      model.newPrice = (model.eprValue ?? 0) + updated;
-      model.marginPercentage =
-          (updated - (model.evaluatedPrice ?? 0)) / updated;
 
-      if (percent == 0) {
+      // Reset controllers
+      _controllers[itemCode]?.text = '0.00';
+      _updatedpricecontrollers[itemCode]?.text = (model.casePrice ?? 0)
+          .toStringAsFixed(2);
+    } else {
+      model.updatedPercentage = percent;
+      model.updatedPrice = updatedPrice;
+      model.newPrice = (model.eprValue ?? 0) + model.updatedPrice!;
+
+      if (percent == 0 || (model.evaluatedPrice ?? 0) == 0) {
         model.isapproved = '';
-        model.casePrice = updated;
         model.marginPercentage = 0;
-        // model.updatedPrice = updated;
-      } else if (updated > (model.evaluatedPrice ?? 0) &&
-          updated < (model.salesPrice ?? double.infinity)) {
-        model.isapproved = 'Yes';
       } else {
-        model.isapproved = '';
+        model.marginPercentage =
+            ((updatedPrice - (model.evaluatedPrice ?? 0)) / updatedPrice) * 100;
+
+        if (updatedPrice > (model.evaluatedPrice ?? 0) &&
+            updatedPrice < (model.salesPrice ?? double.infinity)) {
+          model.isapproved = 'Yes';
+        } else {
+          model.isapproved = '';
+        }
       }
+
+      // ✅ Sync both controllers
+      _controllers[itemCode]?.text = percent.toStringAsFixed(2);
+      _updatedpricecontrollers[itemCode]?.text = updatedPrice.toStringAsFixed(
+        2,
+      );
     }
 
     _buildRows();

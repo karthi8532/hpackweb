@@ -48,6 +48,7 @@ class ApprovalDetail {
   final String effectiveDate;
   final String priceListName;
   final String remarks;
+  final String approverremarks;
   final String status;
 
   ApprovalDetail({
@@ -57,6 +58,7 @@ class ApprovalDetail {
     required this.effectiveDate,
     required this.priceListName,
     required this.remarks,
+    required this.approverremarks,
     required this.status,
   });
 
@@ -67,7 +69,8 @@ class ApprovalDetail {
       cardName: json['CardName'],
       effectiveDate: json['EffectiveDate'],
       priceListName: json['PriceListName'],
-      remarks: json['Remarks'],
+      remarks: json['Remarks'] ?? "-",
+      approverremarks: json['ApproverRemarks'] ?? "-",
       status: json['Status'],
     );
   }

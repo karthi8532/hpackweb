@@ -3,6 +3,7 @@ import 'dart:html' as html;
 import 'dart:ui';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:hpackweb/models/customerModel.dart';
+import 'package:hpackweb/models/pdfmodel.dart';
 import 'package:hpackweb/models/pricelistModel.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -20,7 +21,7 @@ class PdfDownloadService {
   // Function to generate and download approved price list
   Future<void> downloadApprovedPdfWeb({
     required CustomerModel? customer,
-    required List<PriceListModel> priceList,
+    required List<PdfListModel> priceList,
   }) async {
     final document = PdfDocument();
 
@@ -29,10 +30,24 @@ class PdfDownloadService {
 
     final page = document.pages.add();
 
-    final regularFont = PdfStandardFont(PdfFontFamily.helvetica, 12);
-    final boldFont = PdfStandardFont(
-      PdfFontFamily.helvetica,
-      12,
+    // final regularFont = PdfStandardFont(PdfFontFamily., 8);
+    // final boldFont = PdfStandardFont(
+    //   PdfFontFamily.helvetica,
+    //   8,
+    //   style: PdfFontStyle.bold,
+    // );
+
+    final ByteData fontData = await rootBundle.load('assets/fonts/tahoma.ttf');
+    final Uint8List fontBytes = fontData.buffer.asUint8List();
+
+    // Create a custom TrueType font
+    final PdfFont regularFont = PdfTrueTypeFont(
+      fontBytes,
+      7,
+    ); // Change size as needed
+    final PdfFont boldFont = PdfTrueTypeFont(
+      fontBytes,
+      7,
       style: PdfFontStyle.bold,
     );
 
@@ -73,7 +88,9 @@ class PdfDownloadService {
 
     // Grid
     final PdfGrid grid = PdfGrid();
-    grid.columns.add(count: 7);
+
+    grid.columns.add(count: 8);
+    grid.repeatHeader = true;
     grid.headers.add(1);
     final headerRow = grid.headers[0];
     final headers = [
@@ -81,6 +98,7 @@ class PdfDownloadService {
       'Item Name',
       'Case Size',
       'Pallet Qty',
+      'Current Price',
       'Updated Price',
       'EPR Value',
       'New Price',
@@ -110,10 +128,11 @@ class PdfDownloadService {
       row.cells[0].value = item.itemCode ?? '';
       row.cells[1].value = item.itemName ?? '';
       row.cells[2].value = item.uCaseSize ?? '';
-      row.cells[3].value = item.uPalletQty?.toStringAsFixed(0) ?? '';
-      row.cells[4].value = item.updatedPrice?.toStringAsFixed(2) ?? '';
-      row.cells[5].value = item.eprValue?.toStringAsFixed(2) ?? '';
-      row.cells[6].value = item.newPrice?.toStringAsFixed(2) ?? '';
+      row.cells[3].value = item.uPalletQty?.toStringAsFixed(2) ?? '';
+      row.cells[4].value = item.casePrice?.toStringAsFixed(2) ?? '';
+      row.cells[5].value = item.updatedPrice?.toStringAsFixed(2) ?? '';
+      row.cells[6].value = item.eprValue?.toStringAsFixed(2) ?? '';
+      row.cells[7].value = item.newPrice?.toStringAsFixed(2) ?? '';
 
       for (int i = 0; i < row.cells.count; i++) {
         row.cells[i].style = PdfGridCellStyle(
@@ -127,7 +146,7 @@ class PdfDownloadService {
     }
 
     // Set column widths
-    final widths = [100.0, 200.0, 70.0, 80.0, 90.0, 90.0, 100.0];
+    final widths = [100.0, 200.0, 70.0, 70.0, 70.0, 70.0, 70.0, 70.0];
     for (int i = 0; i < widths.length; i++) {
       grid.columns[i].width = widths[i];
     }
